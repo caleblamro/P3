@@ -1,5 +1,11 @@
 #ifndef __PARSER__H__
 #define __PARSER__H__
+/**
+ * Author: Caleb Lamoreaux
+ * Project: Project 3 CSE 340 Fall 2023
+ * ASU_ID: 1222071513
+ * Description: Header file for the Parser class. Contains other structs used in parser.cc as well.
+*/
 
 #include <string>
 #include <vector>
@@ -8,25 +14,26 @@
 #include <map>
 #include <vector>
 
-
+// Used to contain the information of the program during compile time. Also used in parse_Generate_Intermediate_Representation.
 struct Program {
     std::map<int, int> mem;
-    std::map<std::string, int> mem_mappings;
+    std::map<std::string, int> mem_mappings; // Used to associate Token.lexeme with a memory location
     InstructionNode* start;
     std::vector<int> inputs;
 };
+// A simple struct for an expression used with assign_stmts
 struct Expression {
     int op1_location;
     ArithmeticOperatorType op_type;
     int op2_location;
 };
-
+// Similar to expression, used to contain the information needed for a condition
 struct Condition {
     int op1_location;
     ConditionalOperatorType type;
     int op2_location;
 };
-
+// This is a vital part of the program, as it allows O(N) append operations to the instructions
 struct InstructionList {
     InstructionNode* start;
     InstructionNode* end;

@@ -1,3 +1,9 @@
+/**
+ * Author: Caleb Lamoreaux
+ * Project: Project 3 CSE 340 Fall 2023
+ * ASU_ID: 1222071513
+ * Description: Main file for Project 3, parses and constructs the program to be executed. Essentially a very simple compiler.
+*/
 #include "parser.h"
 #include <iostream>
 
@@ -7,6 +13,7 @@ void syntax_error() {
     exit(0);
 }
 
+// Checks if an ID has been added to the mem_mappings
 int Parser::location(std::string id) {
     auto it = program.mem_mappings.find(id);
     if(it == program.mem_mappings.end()) {
@@ -15,7 +22,7 @@ int Parser::location(std::string id) {
         return program.mem_mappings[id];
     }
 }
-
+// Construct a no-op node
 InstructionNode* get_no_operation() {
     InstructionNode* stmt = new InstructionNode();
     stmt->type = InstructionType::NOOP;
@@ -27,7 +34,6 @@ InstructionNode* get_no_operation() {
 Token Parser::expect(TokenType t) {
     Token tkn = lexer.GetToken();
     if(tkn.token_type != t) {
-        std::cout << "Error: expected: " << t << " but found: " << tkn.lexeme << " type: " << tkn.token_type << std::endl;
         syntax_error();
     }
     return tkn;
@@ -37,6 +43,7 @@ Parser::Parser() {
     variable_counter = 0;
 }
 
+// Used to parse NUM and only NUM, adds the constant to mem_mappings and mem if not present already
 int Parser::parse_constant(Token t) {
     int result = location(t.lexeme);
 
@@ -47,41 +54,41 @@ int Parser::parse_constant(Token t) {
     }
     return location(t.lexeme);
 }
-
+// Entry point for parsing
 Program Parser::parse_program() {
-    // std::cout << "program" << std::endl;
+    // Consume the var_section
     parse_var_section();
     // At this point, we've populated program.mem_mappings with all the variable names declared in var_section
     InstructionList body = parse_body();
     program.start = body.start;
 
+    // Parse and populate inputs
     parse_inputs();
 
     return program;
 }
 
+// Method to parse the var section
 void Parser::parse_var_section() {
-    // std::cout << "var_section" << std::endl;
     parse_id_list();
     expect(TokenType::SEMICOLON);
 }
 
 void Parser::parse_id_list() {
-    // std::cout << "id_list" << std::endl;
     Token t = expect(TokenType::ID);
     // No need to check if we've inserted a name already, instructions say to assume all names are unique
     program.mem_mappings[t.lexeme] = variable_counter;
     //Initialize this variable to zero
     program.mem[variable_counter++] = 0;
+    // We may see a comma here, which tells us to parse another id list
     Token maybe_comma = lexer.peek(1);
     if(maybe_comma.token_type == TokenType::COMMA) {
         lexer.GetToken();
         parse_id_list();
     }
 }
-
+// Method to parse the body
 InstructionList Parser::parse_body() {
-    // std::cout << "body" << std::endl;
     expect(TokenType::LBRACE);
 
     InstructionList list = parse_stmt_list();
@@ -91,9 +98,7 @@ InstructionList Parser::parse_body() {
 }
 
 InstructionList Parser::parse_stmt_list() {
-    // std::cout << "stmt_list" << std::endl;
     InstructionList parsed_stmt = parse_stmt();
-    // we have our statement, but we need to ensure that we know where the beginning and end of the stmt is
     Token t = lexer.peek(1);
     // We know this is the last stmt if after the stmt we see an RBRACE, which closes out the stmt_list
     if(t.token_type == TokenType::RBRACE) {
@@ -103,8 +108,11 @@ InstructionList Parser::parse_stmt_list() {
     if(t.token_type == TokenType::ID || t.token_type == TokenType::WHILE || t.token_type == TokenType::IF|| t.token_type == TokenType::SWITCH 
     || t.token_type == TokenType::FOR || t.token_type == TokenType::OUTPUT || t.token_type == TokenType::INPUT) {
         // At this point, we know we have another statement to parse, so we can call parse_stmt_list recursively
+        // We also need to link the statements together, so we will set the end of the previous parsed_stmt to the start of the current parsed_list
         InstructionList parsed_list = parse_stmt_list();
         parsed_stmt.end->next = parsed_list.start;
+
+        // Construct the InstructionList
         InstructionList result;
         result.start = parsed_stmt.start;
         result.end = parsed_list.end;
@@ -112,10 +120,10 @@ InstructionList Parser::parse_stmt_list() {
     }
     syntax_error();
 }
-
+// Method to parse a statement
 InstructionList Parser::parse_stmt() {
-    // std::cout << "stmt" << std::endl;
     Token t = lexer.peek(1);
+    // This simply checks the token t for a terminal that is FIRST(stmt_type)
     if(t.token_type == TokenType::ID) {
         return parse_assign_stmt();
     }else if(t.token_type == TokenType::WHILE) {
@@ -135,24 +143,24 @@ InstructionList Parser::parse_stmt() {
         syntax_error();
     }
 }
-
+// Parses the assignment statement and returns an instruction list with the assign statement as the only instruction in the list
 InstructionList Parser::parse_assign_stmt() {
-    // std::cout << "assign_stmt" << std::endl;
     // Create empty assign stmt
     InstructionNode* stmt = new InstructionNode();
     stmt->type = InstructionType::ASSIGN;
     stmt->next = NULL;
+
     // Extract LHS variable info
     Token var_id = expect(TokenType::ID);
     int var_location = location(var_id.lexeme);
-
+    // Assign the location to the index of the LHS
     stmt->assign_inst.left_hand_side_index = var_location;
 
     expect(TokenType::EQUAL);
 
-    // Peek the next token, to check which non-terminal (primary or expr) should be parsed - don't consume since parse_primary and parse_expr do this
+    // Here we peek(2) since it's the only way to differentiate between and expr and primary
+    // The token will be a semicolon if its primary and otherwise it must be an expression
     Token op = lexer.peek(2);
-    // primary has only two possibilities: ID or NUM, so we know that if we see and ID or NUM primary must be the next non-terminal
     if(op.token_type == TokenType::SEMICOLON) {
         int primary_location = parse_primary();
         stmt->assign_inst.opernd1_index = primary_location;
@@ -163,7 +171,6 @@ InstructionList Parser::parse_assign_stmt() {
         stmt->assign_inst.opernd2_index = e.op2_location;
         stmt->assign_inst.op = e.op_type;
     }
-    
     expect(TokenType::SEMICOLON);
     // Make an InstructionList with one node (need to set start and end to the stmt since it is the first and last node in the list)
     InstructionList result;
@@ -172,8 +179,8 @@ InstructionList Parser::parse_assign_stmt() {
     return result;
 }
 
+// Parses the expression and returns all the required information for the instruction
 Expression Parser::parse_expr() {
-    // std::cout << "expr" << std::endl;
     int op1_location = parse_primary();
     ArithmeticOperatorType op_type = parse_op();
     int op2_location = parse_primary();
@@ -184,18 +191,20 @@ Expression Parser::parse_expr() {
     return e;
 }
 
+// Parse a primary token, and return its location in memory
 int Parser::parse_primary() {
-    // std::cout << "primary" << std::endl;
     Token t = lexer.GetToken();
     if(t.token_type == TokenType::ID) {
+        // If it's an ID, return the location of it
         return location(t.lexeme);
     }else if(t.token_type == TokenType::NUM) {
+        // If it's a constant, parse it, and return its location
         return parse_constant(t);
     }
 }
 
+// Simply parses an operator and returns its type
 ArithmeticOperatorType Parser::parse_op() {
-    // std::cout << "op" << std::endl;
     Token t = lexer.GetToken();
     if(t.token_type == TokenType::PLUS) {
         return ArithmeticOperatorType::OPERATOR_PLUS;
@@ -210,8 +219,8 @@ ArithmeticOperatorType Parser::parse_op() {
     syntax_error();
 }
 
+// Parses an ouput statement and returns an instruction list containing it
 InstructionList Parser::parse_output_stmt() {
-    // std::cout << "output_stmt" << std::endl;
     InstructionNode* stmt = new InstructionNode();
     stmt->type = InstructionType::OUT;
     stmt->next = NULL;
@@ -228,8 +237,8 @@ InstructionList Parser::parse_output_stmt() {
     return result;
 }
 
+// Similar to parse_output_stmt, this parses the stmt and returns it as an InstructionList
 InstructionList Parser::parse_input_stmt() {
-    // std::cout << "input_stmt" << std::endl;
     InstructionNode* stmt = new InstructionNode();
     stmt->type = InstructionType::IN;
     stmt->next = NULL;
@@ -245,9 +254,8 @@ InstructionList Parser::parse_input_stmt() {
     result.end = stmt;
     return result;
 }
-
+// Parses and returns the while statement
 InstructionList Parser::parse_while_stmt() {
-    // std::cout << "while_stmt" << std::endl;
     // Create the CJMP node
     InstructionNode* stmt = new InstructionNode();
     stmt->type = InstructionType::CJMP;
@@ -262,6 +270,7 @@ InstructionList Parser::parse_while_stmt() {
     stmt->cjmp_inst.opernd1_index = condition.op1_location;
     stmt->cjmp_inst.opernd2_index = condition.op2_location;
     InstructionNode* no_operation = get_no_operation();
+    // Jump to after the while loop if CJMP is false
     stmt->cjmp_inst.target = no_operation;
 
 
@@ -272,7 +281,9 @@ InstructionList Parser::parse_while_stmt() {
 
 
     InstructionList body = parse_body();
+    // If the stmt is true, go to body
     stmt->next = body.start;
+    // Jump back to the CJMP node to continue the loop
     body.end->next = jump;
 
 
@@ -283,7 +294,6 @@ InstructionList Parser::parse_while_stmt() {
 }
 
 InstructionList Parser::parse_if_stmt() {
-    // std::cout << "if_stmt" << std::endl;
     // Set up if stmt node
     InstructionNode* stmt = new InstructionNode();
     stmt->type = InstructionType::CJMP;
@@ -316,7 +326,6 @@ InstructionList Parser::parse_if_stmt() {
 }
 
 Condition Parser::parse_condition() {
-    // std::cout << "condition" << std::endl;
     Condition c;
     
     int op1_location = parse_primary();
@@ -329,9 +338,8 @@ Condition Parser::parse_condition() {
 
     return c;
 }
-
+// Simply parses the relop and returns its type
 ConditionalOperatorType Parser::parse_relop() {
-    // std::cout << "relop" << std::endl;
     Token t = lexer.GetToken();
     if(t.token_type == TokenType::GREATER) {
         return ConditionalOperatorType::CONDITION_GREATER;
@@ -342,28 +350,34 @@ ConditionalOperatorType Parser::parse_relop() {
     }
     syntax_error();
 }
-
+// Parses, constructs, and returns a switch statement
 InstructionList Parser::parse_switch_stmt() {
     expect(TokenType::SWITCH);
     
+    // Get location of variable to switch on
     int var_location = location(expect(TokenType::ID).lexeme);
 
     expect(TokenType::LBRACE);
     
-    // Set up a location for the 
+    // Set up a location for after the switch statement
     InstructionNode* end_of_switch = get_no_operation();
     
     std::vector<InstructionList> cases;
     parse_case_list(var_location, end_of_switch, cases);
 
     Token t = lexer.peek(1);
+    // If we have a default case, add it to the InstructionList of cases
     if(t.token_type == TokenType::DEFAULT) {
+        // Parses the default case and sets the instruction after the InstructionList to the end_of_switch
         InstructionList default_case = parse_default_case(end_of_switch);
+        // This chains the cases together in such a way that each case is checked one after another
+        // Jumping to the next case if false, and continuing to the body if true
         for(size_t i = 0; i < cases.size() - 1; i++) {
             cases[i].start->next = cases[i+1].start;
         }
         cases[cases.size() - 1].start->next = default_case.start;
     }else{
+        // Same as above except there's no default case being added
         for(size_t i = 0; i < cases.size() - 1; i++) {
             cases[i].start->next = cases[i+1].start;
         }
@@ -371,14 +385,14 @@ InstructionList Parser::parse_switch_stmt() {
     }
 
     expect(TokenType::RBRACE);
+
     InstructionList result;
     result.start = cases[0].start;
     result.end = end_of_switch;
     return result;
 }
-
+// Parses, constructs, and returns a for statement
 InstructionList Parser::parse_for_stmt() {
-    // std::cout << "for_stmt" << std::endl;
     expect(TokenType::FOR);
     expect(TokenType::LPAREN);
     // Parse the assignment statement as a single instruction (if you look at the function all it does it set the start and end to the same InstructionNode*)
@@ -395,6 +409,7 @@ InstructionList Parser::parse_for_stmt() {
     condition_stmt->cjmp_inst.condition_op = condition.type;
 
     expect(TokenType::SEMICOLON);
+    // This is the assignment statement we will be doing after the body every iteration
     InstructionNode* assign_stmt_repeat = parse_assign_stmt().start;
     expect(TokenType::RPAREN);
 
@@ -404,6 +419,7 @@ InstructionList Parser::parse_for_stmt() {
     jump->type = InstructionType::JMP;
     jump->jmp_inst.target = condition_stmt;
 
+    // Tie together the statement
     assign_stmt->next = condition_stmt;
     condition_stmt->next = body.start;
     body.end->next = assign_stmt_repeat;
@@ -414,9 +430,8 @@ InstructionList Parser::parse_for_stmt() {
     result.end = end_of_for;
     return result;
 }
-
+// Parses the cases in a switch statement and adds them to list
 void Parser::parse_case_list(int var_location, InstructionNode* end_of_switch, std::vector<InstructionList>& list) {
-    // std::cout << "case_list" << std::endl;
     InstructionList parsed_case = parse_case(var_location, end_of_switch);
     list.push_back(parsed_case);
     Token t = lexer.peek(1);
@@ -424,9 +439,8 @@ void Parser::parse_case_list(int var_location, InstructionNode* end_of_switch, s
         parse_case_list(var_location, end_of_switch, list);
     }
 }
-
+// Parses and returns a case
 InstructionList Parser::parse_case(int var_location, InstructionNode* end_of_switch) {
-    // std::cout << "case" << std::endl;
     InstructionNode* equality_check = new InstructionNode();
     equality_check->type = InstructionType::CJMP;
     equality_check->cjmp_inst.condition_op = ConditionalOperatorType::CONDITION_NOTEQUAL;
@@ -452,9 +466,8 @@ InstructionList Parser::parse_case(int var_location, InstructionNode* end_of_swi
     result.end = equality_check;
     return result;
 }
-
+// Parse and return default case
 InstructionList Parser::parse_default_case(InstructionNode* end_of_switch) {
-    // std::cout << "default_case" << std::endl;
     expect(TokenType::DEFAULT);
     expect(TokenType::COLON);
 
@@ -462,16 +475,15 @@ InstructionList Parser::parse_default_case(InstructionNode* end_of_switch) {
     body.end->next = end_of_switch;
     return body;
 }
-
+// Parse inputs
 void Parser::parse_inputs() {
-    // std::cout << "inputs" << std::endl;
     parse_num_list();
 }
-
+// Parse num list
 void Parser::parse_num_list() {
-    // std::cout << "num_list" << std::endl;
     Token t = expect(TokenType::NUM);
 
+    // Add constant to inputs list
     int val = std::stoi(t.lexeme);
     inputs.push_back(val);
 
