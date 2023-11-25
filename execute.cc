@@ -14,7 +14,7 @@
 
 using namespace std;
 
-#define DEBUG 0     // 1 => Turn ON debugging, 0 => Turn OFF debugging
+#define DEBUG 1     // 1 => Turn ON debugging, 0 => Turn OFF debugging
 
 int mem[1000];
 int next_available = 0;
